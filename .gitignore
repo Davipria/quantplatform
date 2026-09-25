@@ -1,0 +1,17 @@
+# secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node / build output
+node_modules/
+frontend/dist/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

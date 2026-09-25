@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+/* Theme tokens: referenced from Tailwind utilities as arbitrary values, e.g. bg-[var(--surface)].
+   Kept as plain custom properties (not a Tailwind @theme block) because dark mode here follows the
+   OS setting via a media query, not a class Tailwind would toggle. */
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb;
+  --surface: #f4f4f2;
+  --border: #e2e1dc;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --grid: rgba(128, 128, 128, 0.18);
+  --series: #2a78d6;
+  --muted: #8a8a85;
+  --warn-bg: #fff4d6;
+  --warn-text: #6b4a00;
+  --err: #b3261e;
+  --pos: #1a7f4b;
+  --navy: #26405f; --brand: #26405f; --brand-soft: #dbe8f8;
+  --tabbar: #cfe0f7; --tabbar-text: #1f4373;
+  --up: #249224; --down: #e03131;
+  --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a; --cat-4: #eda100;
+  --cat-5: #e87ba4; --cat-6: #008300; --cat-7: #4a3aa7; --cat-8: #e34948;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #1a1a19;
+    --surface: #242423;
+    --border: #383836;
+    --text: #f2f2f0;
+    --text-2: #c3c2b7;
+    --series: #3987e5;
+    --warn-bg: #3a2e0d;
+    --warn-text: #f0d48a;
+    --err: #f2b8b5;
+    --pos: #5ccf98;
+    --navy: #2b4a74; --brand: #3d6bab; --brand-soft: #23324a;
+    --tabbar: #27364b; --tabbar-text: #bcd3f2;
+    --up: #3fbf5f; --down: #ef5b5b;
+    --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500;
+    --cat-5: #d55181; --cat-6: #008300; --cat-7: #9085e9; --cat-8: #e66767;
+  }
+}
+
+/* Base element defaults: kept as plain CSS (Tailwind's recommended way to style bare tags) so the
+   many plain <input>/<button>/<table> elements across the tabs don't each need utility classNames. */
+@layer base {
+  body {
+    margin: 0; padding: 0 16px 48px;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { margin: 0; font-size: 22px; font-weight: 600; }
+  h2 { margin: 28px 0 12px; font-size: 16px; font-weight: 600; }
+  h3 { font-size: 14px; margin: 18px 0 6px; font-weight: 600; }
+
+  form { display: flex; align-items: center; gap: 8px; }
+  label { color: var(--text-2); font-size: 13px; }
+  input, select, button {
+    font: inherit; color: var(--text); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
+  }
+  input { width: 110px; text-transform: uppercase; }
+  input[type="checkbox"] { width: auto; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  :focus-visible { outline: 2px solid var(--series); outline-offset: 2px; }
+
+  details { margin-top: 16px; }
+  summary { cursor: pointer; color: var(--text-2); }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px; }
+  th, td { padding: 5px 10px; text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { position: sticky; top: 0; background: var(--surface); font-weight: 600; }
+  tr + tr td { border-top: 1px solid var(--border); }
+}
