@@ -1,6 +1,11 @@
 # secrets
 .env
 
+# Local-only files
+CLAUDE.md
+README.md
+.env.example
+
 # Python
 .venv/
 __pycache__/
