@@ -175,7 +175,6 @@ backend/    FastAPI app (main.py) and logic: data.py, overview.py, seasonality.p
 frontend/   React + Vite: src/App.jsx (shell), one *Tab.jsx per feature, Home.jsx, Watchlist.jsx,
             Plot.jsx (Plotly wrapper), perf.js (return/drawdown maths), rows.js (shared ranking rows), api.js
 .env        your keys (not committed);  .env.example  the template
-CLAUDE.md   project tracker: decisions, validation notes, known limitations per module
 ```
 
 ## General limitations
@@ -186,5 +185,3 @@ CLAUDE.md   project tracker: decisions, validation notes, known limitations per 
 - Yahoo is unofficial and can rate-limit heavy scans (Rankings undervalued/overvalued, big groups).
 - Statement history from yfinance is short (about 4-5 years); long histories come from Finnhub.
 - The frontend bundle is about 5 MB because of Plotly.
-
-Per-module method notes, validation results and detailed limitations are in [CLAUDE.md](CLAUDE.md).
