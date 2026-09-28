@@ -16,6 +16,7 @@ import pandas as pd
 import yfinance as yf
 from cachetools.func import ttl_cache
 
+import massive
 from data import DataError, _row, finnhub_series, upstream, usd_per_unit
 
 ERP = 0.05  # equity risk premium used in CAPM
@@ -57,7 +58,14 @@ def _latest(df: pd.DataFrame, *names: str) -> float | None:
 
 @ttl_cache(maxsize=1, ttl=3600)
 def _risk_free() -> float:
-    """US 10-year Treasury yield (Yahoo ^TNX is quoted in percent); 4.25% if unavailable."""
+    """US 10-year Treasury yield: the Fed series from Massive (shared with the Macro tab, at most a few seconds' wait for its
+    call quota), else Yahoo's ^TNX (quoted in percent); 4.25% if neither answers."""
+    try:
+        rows = [r["yield_10_year"] for r in massive.treasury_yields(max_wait=3) if r.get("yield_10_year") is not None]
+        if rows and 0 < rows[-1] < 20:
+            return rows[-1] / 100
+    except DataError:
+        pass
     try:
         v = float(yf.Ticker("^TNX").fast_info["lastPrice"])
         return v / 100 if 0 < v < 20 else 0.0425

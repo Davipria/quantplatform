@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useApi, usePoll } from './api.js';
 import {
-  RANGES, dividendStats, drawdown, indexOnOrAfter, intradayTicks, windowOf, withLatest, withLiveBar, yearlyReturns,
+  RANGES, deflate, dividendStats, drawdown, indexOnOrAfter, intradayTicks, windowOf, withLatest, withLiveBar, yearlyReturns,
 } from './perf.js';
 import Plot from './Plot.jsx';
 import { Seg, big } from './ui.jsx';
@@ -222,6 +222,7 @@ export default function OverviewTab({ symbol, quote }) {
   const [range, setRange] = useState('5y');
   const [overlay, setOverlay] = useState(null);
   const [log, setLog] = useState(false);
+  const [real, setReal] = useState(false);
   const [ddInfo, setDdInfo] = useState(false);
   const [years, setYears] = useState('20');
   const [divMode, setDivMode] = useState('payment');
@@ -230,7 +231,13 @@ export default function OverviewTab({ symbol, quote }) {
   const ov = useApi(overlay && overlay !== 'div' ? `/api/overview/${enc}/overlay/${overlay}` : null);
 
   // the live price moves the chart's last point, the tiles, the drawdown and the year to date; the rest of the history is hourly
-  const d = useMemo(() => withLatest(api.data, quote?.price, quote?.date), [api.data, quote?.price, quote?.date]);
+  const nominal = useMemo(() => withLatest(api.data, quote?.price, quote?.date), [api.data, quote?.price, quote?.date]);
+  // "Inflation-adjusted": every close in today's dollars (US CPI), so the chart, tiles, drawdown and yearly bars show real changes. The
+  // dividend yield keeps nominal prices. Only for prices in USD (the CPI is the US one).
+  const canReal = nominal?.currency === 'USD';
+  const cpi = useApi(real && canReal ? '/api/macro/cpi' : null);
+  const isReal = real && canReal && !!cpi.data;
+  const d = useMemo(() => (isReal ? deflate(nominal, cpi.data) : nominal), [isReal, nominal, cpi.data]);
   const wins = useMemo(() => (d ? Object.fromEntries(RANGES.map(([k]) => [k, windowOf(d.dates, d.close, k)])) : {}), [d]);
   const active = wins[range] ? range : 'all'; // a stock too young for the chosen range shows its whole history
   const w = wins[active];
@@ -247,7 +254,7 @@ export default function OverviewTab({ symbol, quote }) {
   const dd = useMemo(() => (d ? drawdown(d.close) : null), [d]);
   const ddView = useMemo(() => (dd && w ? dd.slice(w.i0) : null), [dd, w]);
   const yearly = useMemo(() => (d ? yearlyReturns(d.dates, d.close) : []), [d]);
-  const divs = useMemo(() => (d ? dividendStats(d.dividends, d.dates.at(-1), d.close.at(-1)) : null), [d]);
+  const divs = useMemo(() => (nominal ? dividendStats(nominal.dividends, nominal.dates.at(-1), nominal.close.at(-1)) : null), [nominal]);
 
   const divSeries = useMemo(() => (d ? { dates: d.dividends.map((x) => x.date), values: d.dividends.map((x) => x.value) } : null), [d]);
   const bars = useMemo(() => {
@@ -268,7 +275,7 @@ export default function OverviewTab({ symbol, quote }) {
   if (api.error) return <p className="text-[var(--err)] py-6">Could not load the overview for {symbol}: {api.error.message}</p>;
   if (!view) return <p className="text-[var(--text-2)] py-6">Not enough price history for {symbol}.</p>;
 
-  const cur = d.currency ?? '';
+  const cur = isReal ? "USD, today's dollars" : (d.currency ?? '');
   const ddMin = Math.min(...ddView);
   const [trendText, trendTone] = divs ? TREND[divs.trend] : TREND.none;
 
@@ -293,6 +300,12 @@ export default function OverviewTab({ symbol, quote }) {
               </button>
             ))}
             <label className="inline-flex items-center gap-1.5 ml-1.5 text-[var(--tabbar-text)]"><input type="checkbox" checked={log} onChange={(e) => setLog(e.target.checked)} /> Log</label>
+            <label
+              className="inline-flex items-center gap-1.5 ml-1.5 text-[var(--tabbar-text)] has-[:disabled]:opacity-45"
+              title={canReal ? "Prices in today's dollars, using the US consumer price index" : 'Only for prices in US dollars (the index used is the US CPI)'}
+            >
+              <input type="checkbox" checked={real && canReal} disabled={!canReal} onChange={(e) => setReal(e.target.checked)} /> Inflation-adjusted
+            </label>
           </div>
         </div>
         {!intra && <PriceChart dates={view.dates} close={view.close} overlay={overlayProp} log={log} />}
@@ -313,6 +326,14 @@ export default function OverviewTab({ symbol, quote }) {
         {!intra && overlay && overlay !== 'div' && ov.loading && <p className="text-[var(--text-2)] text-[13px]">Loading {OVERLAYS.find((o) => o[0] === overlay)[1]}…</p>}
         {!intra && overlay && overlay !== 'div' && ov.error && <p className="text-[var(--err)] text-[13px]">{ov.error.message}</p>}
         {!intra && overlay && !ov.error && <p className="text-[var(--text-2)] text-[13px]">{OVERLAY_NOTES[overlay]}</p>}
+        {real && canReal && cpi.loading && <p className="text-[var(--text-2)] text-[13px]">Loading the consumer price index…</p>}
+        {real && canReal && cpi.error && <p className="text-[var(--err)] text-[13px]">Could not load the consumer price index: {cpi.error.message}</p>}
+        {isReal && (
+          <p className="text-[var(--text-2)] text-[13px]">
+            Inflation-adjusted: every close is converted into today's dollars with the US consumer price index (latest release {cpi.data.dates.at(-1).slice(0, 7)}),
+            so the tiles, the drawdown and the yearly bars show real gains and losses. {intra ? 'Intraday prices are not adjusted (a few days of inflation are negligible).' : ''}
+          </p>
+        )}
       </section>
 
       <div className="grid grid-cols-30 max-[720px]:grid-cols-2 gap-3 mt-4 mb-7">
@@ -363,7 +384,7 @@ export default function OverviewTab({ symbol, quote }) {
           </select>
         </div>
         <SignedBars {...bars} />
-        <p className="text-[var(--text-2)] text-[13px]">Each bar runs from the year's first close to its last close; the pale bar is the year to date. Prices are split-adjusted, not dividend-adjusted.</p>
+        <p className="text-[var(--text-2)] text-[13px]">Each bar runs from the year's first close to its last close; the pale bar is the year to date. Prices are split-adjusted, not dividend-adjusted{isReal ? ', and adjusted for inflation' : ''}.</p>
       </section>
 
       <section className="mb-7">

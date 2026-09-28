@@ -4,19 +4,29 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
 import data  # noqa: E402  (needs env loaded first: finnhub_series reads the key at call time)
+import breadth  # noqa: E402
+import calendars  # noqa: E402
 import congress  # noqa: E402
 import fairvalue  # noqa: E402
+import filings  # noqa: E402
 import forward  # noqa: E402
+import futures  # noqa: E402
+import insiders  # noqa: E402
+import massive  # noqa: E402
+import macro  # noqa: E402
+import market  # noqa: E402
+import options  # noqa: E402
 import overview  # noqa: E402
 import rankings  # noqa: E402
 import seasonality  # noqa: E402
+import shorts  # noqa: E402
 import sentiment  # noqa: E402
 import solidity  # noqa: E402
 
@@ -38,12 +48,17 @@ def symbol_of(raw: str) -> str:
 # Sync endpoints run in FastAPI's threadpool, which suits the blocking yfinance calls.
 @app.get("/api/config")
 def config():
-    return {"finnhub": bool(os.getenv("FINNHUB_API_KEY"))}
+    return {"finnhub": bool(os.getenv("FINNHUB_API_KEY")), "massive": bool(os.getenv("MASSIVE_API_KEY"))}
 
 
 @app.get("/api/profile/{symbol}")
 def profile(symbol: str):
     return overview.header(symbol_of(symbol))
+
+
+@app.get("/api/logo/{symbol}")
+def logo(symbol: str):
+    return Response(massive.logo(symbol_of(symbol)), media_type="image/png", headers={"Cache-Control": "public, max-age=604800"})
 
 
 @app.get("/api/quote/{symbol}")
@@ -186,6 +201,86 @@ def finnhub(symbol: str, freq: str = "annual"):
 @app.get("/api/news/{symbol}")
 def news(symbol: str):
     return sentiment.tag(data.company_news(symbol_of(symbol)))
+
+
+@app.get("/api/insiders/{symbol}")
+def insider_view(symbol: str):
+    return insiders.insider_activity(symbol_of(symbol))
+
+
+@app.get("/api/short-interest/{symbol}")
+def short_interest_view(symbol: str):
+    return shorts.short_interest(symbol_of(symbol))
+
+
+@app.get("/api/futures/products")
+def futures_products():
+    return futures.products()
+
+
+@app.get("/api/futures/{code}")
+def futures_curve(code: str):
+    return futures.curve(code.upper()[:6])
+
+
+@app.on_event("startup")
+def start_collector():
+    market.start()  # background download of the whole-market daily bars (see market.py)
+
+
+@app.get("/api/breadth")
+def breadth_view():
+    return breadth.breadth()
+
+
+@app.get("/api/calendar")
+def calendar_view():
+    return calendars.calendar()
+
+
+@app.get("/api/options/{symbol}/expirations")
+def options_expirations(symbol: str):
+    return options.expirations(symbol_of(symbol))
+
+
+@app.get("/api/options/{symbol}/contract")
+def options_contract(symbol: str, expiry: str, type: str, strike: float):  # noqa: A002  (query parameter name)
+    return options.contract(symbol_of(symbol), expiry, type.lower(), strike)
+
+
+@app.get("/api/options/{symbol}/expected-move")
+def options_expected_move(symbol: str, expiry: str):
+    return options.expected_move(symbol_of(symbol), expiry)
+
+
+@app.get("/api/funds")
+def funds_list():
+    return filings.funds()
+
+
+@app.get("/api/funds/{cik}")
+def fund_view(cik: str):
+    return filings.fund_portfolio(cik if re.fullmatch(r"\d{10}", cik) else "")
+
+
+@app.get("/api/risk-factors/{symbol}")
+def risk_view(symbol: str):
+    return filings.risk_changes(symbol_of(symbol))
+
+
+@app.get("/api/macro")
+def macro_view():
+    return macro.macro()
+
+
+@app.get("/api/macro/cpi")
+def macro_cpi():
+    return macro.cpi()
+
+
+@app.get("/api/rate-sensitivity/{symbol}")
+def rate_sensitivity_view(symbol: str):
+    return macro.rate_sensitivity(symbol_of(symbol))
 
 
 @app.get("/api/congress/trades")

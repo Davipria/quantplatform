@@ -29,7 +29,7 @@ function quartersInRange(quarters, range) {
   return quarters.filter((q) => q.year >= cutoffYear);
 }
 
-function SummaryChart({ quarters, priceLabel }) {
+export function SummaryChart({ quarters, priceLabel, yTitle = 'Disclosed trade value ($)' }) {
   const hasPrice = quarters.some((q) => q.price != null);
   const build = useCallback((t) => {
     const data = [
@@ -53,11 +53,11 @@ function SummaryChart({ quarters, priceLabel }) {
       layout: {
         barmode: 'group', showlegend: true, legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.18 },
         margin: { l: 64, r: hasPrice ? 56 : 16, t: 16, b: 56 },
-        xaxis: { type: 'category' }, yaxis: { title: { text: 'Disclosed trade value ($)' } },
+        xaxis: { type: 'category' }, yaxis: { title: { text: yTitle } },
         ...(hasPrice ? { yaxis2: { title: { text: priceLabel }, overlaying: 'y', side: 'right', showgrid: false, zeroline: false, rangemode: 'tozero' } } : {}),
       },
     };
-  }, [quarters, hasPrice, priceLabel]);
+  }, [quarters, hasPrice, priceLabel, yTitle]);
   return <Plot build={build} className="h-[320px]" />;
 }
 

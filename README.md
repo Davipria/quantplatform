@@ -67,6 +67,7 @@ Keys live only in `.env` at the project root (git-ignored). Never commit them.
 |---|---|---|
 | `FINNHUB_API_KEY` | Yes for most fundamentals | Long histories of ratios, ROIC, FCF yield, EV/EBITDA vs price, Solidity (SEC filings), Overview overlays, historical multiples, company news. Free tier: 60 calls/min, US listings only; the backend limits itself to 50/min and retries on HTTP 429. |
 | `BENZINGA_API_KEY` | No | Extra headlines merged into the News tab. Without it the tab still works from Finnhub. |
+| `MASSIVE_API_KEY` | No | Macro, Insiders, Short interest, Futures, Market tabs, company logos and AI news sentiment (see below). Free plan: **5 calls per minute**, 2 years of prices, end-of-day data; the backend keeps a queue and a disk cache in `backend/cache/` (git-ignored). Details of what the free plan includes: `docs/MASSIVE_API.md`. |
 | `BARGO_API_KEY` | No | Recent Senate trades on the Politicians tab. Without it only House trades show. Bargo's free-tier terms require the credit line the tab displays. |
 
 yfinance needs no key and supplies prices, statements, estimates, profiles, calendars, search and screeners. Prices come from Yahoo only. Responses are cached in memory (1 hour for most data, 10 s for quotes, 60 s for intraday and watchlist).
@@ -129,6 +130,30 @@ Congressional stock trades disclosed under the STOCK Act.
 - "This company only" switches the chart and table to the current ticker and adds its quarter-end price on a second axis.
 - Sources: House from the `TattooedHead/house-stock-watcher-data` GitHub dataset (full history from 2012); Senate from Bargo AI (rolling last ~3 months, needs `BARGO_API_KEY`). Filings lag trades by up to 45 days and amounts are ranges. Third-party mirrors, not official government feeds.
 
+### Macro
+Federal Reserve data through Massive, not tied to the company in the header. 10 tiles (10-year yield, 10Y-2Y and 10Y-3M spreads, fed funds target, CPI and core CPI year on year, real 10-year yield, unemployment, Sahm indicator with a recession-signal mark at 0.50, wage growth) and 9 charts with 5Y/10Y/20Y/Max pills: the yield curve today / 1 month / 1 year ago, yields over time with inverted-curve periods shaded, spreads, the policy rate, inflation, inflation expectations, real yield, unemployment with the Sahm bars, wages vs inflation. Below them, "How {symbol} reacts to interest rates": monthly returns regressed on the change in the 10-year yield, alone and with the S&P 500 removed, over 5 years / 10 years / all history, with a rolling 36-month chart, a scatter and average returns by regime. The same 10-year yield is the risk-free rate of the Fair value tab. Overview has an "Inflation-adjusted" checkbox that shows every price in today's dollars (USD stocks only).
+
+### Insiders
+SEC Form 4 open-market purchases and sales by officers, directors and 10% owners (US-listed only): 6 tiles for the last 12 months, quarterly buy/sell bars with the stock price, cluster buying (3+ insiders buying within 30 days), a by-insider table and every transaction with 10b5-1 and late flags and a link to the filing. Grants, option exercises and tax withholding are left out.
+
+### Short interest
+FINRA short interest (twice a month since 2017), daily short volume (since 2024) and free float: short % of float, days to cover, the 20-day average short-volume ratio, and a four-flag squeeze checklist (short interest at least 10% of float, days to cover at least 5, short interest up 10% in 3 reports, price above its 50-day average). A screening aid, not a forecast. The float is today's for every date, so older % values are approximate.
+
+### Futures
+Term structure of 20 CME / CBOT / COMEX / NYMEX products (index futures, energy, metals, grains, livestock, Treasuries, EUR/USD): the curve now and 1 / 3 / 12 months ago, contango or backwardation, annualised roll yield, calendar spreads and the front-vs-next spread over time, for the nearest 6 contracts (thin ones are marked). End-of-day data. A product takes 1-2 minutes to load the first time (one download per contract), then 6 hours from the disk cache. ICE contracts (coffee, sugar, cocoa) are not covered.
+
+### Market
+Breadth and scans for about 3,000 liquid US common stocks: advancers/decliners and the advance-decline line, the share of stocks above their 20 / 50 / 200-day average, new highs and lows, and lists of top gainers and losers, most active, volume spikes, momentum leaders and laggards (12-1, 6-1 or 3-1 months, whichever the history allows), lowest volatility and new highs and lows. Clicking a symbol opens its Overview. Data comes from Massive's "grouped daily" endpoint, one call per session. A background collector started with the backend downloads the last ~300 sessions newest first at 2 calls a minute (about 2.5 hours in total, leaving 3 calls a minute for the rest of the app) into `backend/cache/massive/grouped.db`; the tab shows its progress and each feature unlocks as history builds up (20-day average at 20 sessions, low volatility 61, 200-day average 200, 12-1 momentum 274). The newest session is yesterday's (today's is not on the free plan). Set `NO_BACKFILL=1` to switch the collector off. Rankings also gets a "Most traded (US)" universe from this data.
+
+### Filings
+Two views. **Fund portfolios (13F):** what 14 well-known investors (Berkshire Hathaway, Pershing Square, Scion, Appaloosa, Third Point, Duquesne, Baupost, Greenlight, Carl Icahn, Soros, Tiger Global, Lone Pine, Viking, Coatue) held at the end of their latest quarter, with weights, share counts, values, what is new, added, reduced or sold out since the quarter before, and a link to the SEC filing. Positions are long US-listed securities only and up to 6 weeks old. Fund identifiers were checked against the SEC's records; funds that stopped filing (for example Scion) show a message. **Risk factors:** the latest 10-K's risk categories compared with the previous 10-K: new risks, dropped ones, more or less emphasis, with the company's own wording. The newest 10-K can be missing because Massive processes filings with a delay.
+
+### Calendar
+Upcoming ex-dividend dates of US common stocks (next 7 / 14 / 30 days, minimum estimated yield, search; special dividends marked; click a company to open it) and IPOs (pending, postponed, recently priced, with price range and offer size). The estimated yield uses the prices collected by the Market tab.
+
+### Options
+No live option chain is on Massive's free plan, so the tab works from the list of contracts and each contract's daily prices. **Analyse a contract:** pick an expiration, call or put and strike (nearest the stock price by default): last traded price, implied volatility, delta, gamma, theta, vega, time value, break-even and a price history, computed with Black-Scholes from the last trade, the stock's close that day, the Treasury rate and the dividend yield (stock options are American; the model is approximate for deep in-the-money puts and around dividends). **Expected move:** the price of the at-the-money straddle for an expiration. **Strategy builder** (in the browser): long call/put, covered call, protective put, bull call spread, bear put spread, straddle, strangle, iron condor, or your own legs; profit or loss at expiry and today by the model, net debit or credit, maximum profit and loss, break-evens and the model's chance of profit. Learning tool, not advice.
+
 ### Watchlist
 A card on the landing page and a top-level tab. Rows show a letter avatar, market-open dot, name, ticker, sparkline (previous session grey, last session green or red), price and % change. Lists: My watchlist (stored in the browser; add through a search box or the header star, remove with the x) and fixed lists for Commodities, Stocks, Indices, Currencies and Crypto. Refreshes every 60 s while a market in the list is open, else every 5 min. Clicking a row opens that symbol's Overview.
 
@@ -157,13 +182,26 @@ All endpoints are `GET` and return JSON. Symbols are validated (400 on a bad for
 | `/api/compare/search?q=` | Ticker lookup by name |
 | `/api/compare/prices?symbols=&years=` | Prices rebased to 100 |
 | `/api/rankings/options` | Markets, sectors, industries |
-| `/api/rankings/universe?kind=peers\|market\|custom&...` | Companies to rank |
+| `/api/rankings/universe?kind=peers\|market\|traded\|custom&...` | Companies to rank |
 | `/api/rankings/row/{symbol}` | One company's ranking metrics |
 | `/api/seasonality/{symbol}?start_month=&vs=` | Seasonal curves and bars |
 | `/api/seasonality/{symbol}/trades?start=MM-DD&end=MM-DD&vs=` | Per-year trade table |
 | `/api/yfinance/ratios/{symbol}` | Fiscal-year ratios |
 | `/api/finnhub/{symbol}?freq=annual\|quarterly` | Finnhub reported series |
 | `/api/news/{symbol}` | Articles with sentiment |
+| `/api/macro`, `/api/macro/cpi` | Macro series; CPI index for the inflation-adjusted price |
+| `/api/rate-sensitivity/{symbol}` | Regression of monthly returns on 10-year yield changes |
+| `/api/insiders/{symbol}` | Form 4 purchases and sales, clusters, quarterly totals |
+| `/api/short-interest/{symbol}` | Short interest, short volume, float, squeeze checklist |
+| `/api/futures/products`, `/api/futures/{code}` | Futures products and one product's term structure |
+| `/api/breadth` | Market breadth, scans and collector progress |
+| `/api/funds`, `/api/funds/{cik}` | 13F fund list and one fund's portfolio |
+| `/api/risk-factors/{symbol}` | Risk-factor changes between the last two 10-Ks |
+| `/api/calendar` | Ex-dividend dates and IPOs |
+| `/api/options/{symbol}/expirations` | Option expirations and strikes (nearest ~3,000 contracts) |
+| `/api/options/{symbol}/contract?expiry=&type=&strike=` | Last price, implied volatility and Greeks of one contract |
+| `/api/options/{symbol}/expected-move?expiry=` | At-the-money straddle for an expiration |
+| `/api/logo/{symbol}` | Company icon (the backend fetches it; the key never reaches the browser) |
 | `/api/congress/trades` | Paginated, filterable trades |
 | `/api/congress/summary[?ticker=]` | Quarterly buy/sell totals |
 
@@ -171,7 +209,10 @@ All endpoints are `GET` and return JSON. Symbols are validated (400 on a bad for
 
 ```
 backend/    FastAPI app (main.py) and logic: data.py, overview.py, seasonality.py, solidity.py,
-            forward.py, fairvalue.py, rankings.py, sentiment.py (+ lm_sentiment.json), congress.py
+            forward.py, fairvalue.py, rankings.py, sentiment.py (+ lm_sentiment.json), congress.py,
+            massive.py (Massive client: 5/min queue, disk cache), macro.py, insiders.py, shorts.py, futures.py,
+            market.py (background collector), breadth.py (market breadth and scans), filings.py (13F, risk factors),
+            calendars.py (dividends, IPOs), options.py (implied volatility, Greeks, expected move)
 frontend/   React + Vite: src/App.jsx (shell), one *Tab.jsx per feature, Home.jsx, Watchlist.jsx,
             Plot.jsx (Plotly wrapper), perf.js (return/drawdown maths), rows.js (shared ranking rows), api.js
 .env        your keys (not committed);  .env.example  the template
@@ -184,4 +225,5 @@ frontend/   React + Vite: src/App.jsx (shell), one *Tab.jsx per feature, Home.js
 - Banks and insurers lack EBITDA, ROIC and Solidity scores; those views say so.
 - Yahoo is unofficial and can rate-limit heavy scans (Rankings undervalued/overvalued, big groups).
 - Statement history from yfinance is short (about 4-5 years); long histories come from Finnhub.
+- Massive's free plan allows 5 calls a minute: pages that need several downloads (a new futures product, a company's insider trades) wait on the first load, and per-company loops (Rankings) do not use it.
 - The frontend bundle is about 5 MB because of Plotly.

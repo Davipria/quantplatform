@@ -361,6 +361,11 @@ def universe(kind: str, key: str, size: int, market: str = "us", sector: str = "
         group, found = _market_companies(market, sector, industry, size)
         symbols = [c["symbol"] for c in found]
         names = {c["symbol"]: c["name"] for c in found}
+    elif kind == "traded":
+        import breadth  # here: breadth imports market, which is not needed for the other kinds
+
+        found = breadth.traded_universe(size)
+        symbols, names, group = [c["symbol"] for c in found], {c["symbol"]: c["name"] for c in found}, "Most traded US stocks (average dollar volume, last 20 sessions)"
     elif kind == "custom":
         symbols, group = re.split(r"[\s,;]+", key), "Your list"
     else:

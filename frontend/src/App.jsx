@@ -1,32 +1,40 @@
 import { useEffect, useState } from 'react';
 import { get, useApi, useQuote } from './api.js';
+import CalendarTab from './CalendarTab.jsx';
 import CompareTab from './CompareTab.jsx';
 import CongressTab from './CongressTab.jsx';
 import EvTab from './EvTab.jsx';
 import FairValueTab from './FairValueTab.jsx';
 import FcfTab from './FcfTab.jsx';
+import FilingsTab from './FilingsTab.jsx';
+import FuturesTab from './FuturesTab.jsx';
 import FyTab from './FyTab.jsx';
 import Home from './Home.jsx';
+import InsidersTab from './InsidersTab.jsx';
+import MacroTab from './MacroTab.jsx';
+import MarketTab from './MarketTab.jsx';
 import NewsTab from './NewsTab.jsx';
+import OptionsTab from './OptionsTab.jsx';
 import OverviewTab from './OverviewTab.jsx';
 import PegTab from './PegTab.jsx';
 import RankingsTab from './RankingsTab.jsx';
 import RatiosTab from './RatiosTab.jsx';
 import RoicTab from './RoicTab.jsx';
 import SeasonalityTab from './SeasonalityTab.jsx';
+import ShortTab from './ShortTab.jsx';
 import SolidityTab from './SolidityTab.jsx';
 import Watchlist, { useWatchlist } from './Watchlist.jsx';
 import { big } from './ui.jsx';
 
 const TABS = [
-  ['overview', 'Overview'], ['seasonality', 'Seasonality'], ['fundamentals', 'Fundamentals'], ['fairvalue', 'Fair value'], ['compare', 'Compare'],
-  ['rankings', 'Rankings'], ['news', 'News'], ['congress', 'Politicians'], ['watchlist', 'Watchlist'],
+  ['overview', 'Overview'], ['seasonality', 'Seasonality'], ['fundamentals', 'Fundamentals'], ['fairvalue', 'Fair value'], ['macro', 'Macro'], ['futures', 'Futures'], ['market', 'Market'], ['calendar', 'Calendar'], ['options', 'Options'], ['compare', 'Compare'],
+  ['rankings', 'Rankings'], ['news', 'News'], ['insiders', 'Insiders'], ['short', 'Short interest'], ['filings', 'Filings'], ['congress', 'Politicians'], ['watchlist', 'Watchlist'],
 ];
 const FUNDAMENTALS = [
   ['ev', 'EV / EBITDA'], ['fy', 'EV / EBITDA vs price'], ['roic', 'ROIC'], ['fcf', 'FCF yield'], ['solidity', 'Solidity'], ['peg', 'PEG'], ['ratios', 'Historical ratios'],
 ];
 const VIEWS = {
-  overview: OverviewTab, fairvalue: FairValueTab, seasonality: SeasonalityTab, compare: CompareTab, rankings: RankingsTab, news: NewsTab, congress: CongressTab,
+  overview: OverviewTab, fairvalue: FairValueTab, macro: MacroTab, futures: FuturesTab, market: MarketTab, calendar: CalendarTab, options: OptionsTab, seasonality: SeasonalityTab, compare: CompareTab, rankings: RankingsTab, news: NewsTab, insiders: InsidersTab, short: ShortTab, filings: FilingsTab, congress: CongressTab,
   ev: EvTab, fy: FyTab, roic: RoicTab, fcf: FcfTab, solidity: SolidityTab, peg: PegTab, ratios: RatiosTab,
 };
 const LAST_SYMBOL = 'quant.symbol';
@@ -125,6 +133,24 @@ function TickerBox({ onLoad, initial }) {
   );
 }
 
+/** The company's icon (fetched by the backend from Massive); the first letter on a coloured circle when there is none. */
+function Logo({ symbol, name }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className="w-16 h-16 rounded-full grid place-items-center text-[26px] font-bold text-[var(--brand)] bg-[var(--brand-soft)]" aria-hidden="true">
+        {name.replace(/^the /i, '').slice(0, 1).toUpperCase()}
+      </div>
+    );
+  }
+  return (
+    <img
+      src={`/api/logo/${encodeURIComponent(symbol)}`} alt="" width="64" height="64"
+      className="w-16 h-16 rounded-full object-contain bg-white p-2 border border-[var(--border)]" onError={() => setFailed(true)}
+    />
+  );
+}
+
 /** Name, ticker, exchange, sector/industry chips and the latest price: stays on screen whichever tab is open. */
 function CompanyHeader({ symbol, quote, watched, onToggleWatch }) {
   const { data: p, error } = useApi(`/api/profile/${encodeURIComponent(symbol)}`);
@@ -138,9 +164,7 @@ function CompanyHeader({ symbol, quote, watched, onToggleWatch }) {
       className="max-w-[1200px] mx-auto grid grid-cols-[auto_1fr_auto] max-[640px]:grid-cols-[auto_1fr] items-center gap-x-5 gap-y-1 pt-3.5 pb-1"
       aria-label="Company"
     >
-      <div className="w-16 h-16 rounded-full grid place-items-center text-[26px] font-bold text-[var(--brand)] bg-[var(--brand-soft)]" aria-hidden="true">
-        {name.replace(/^the /i, '').slice(0, 1).toUpperCase()}
-      </div>
+      <Logo key={symbol} symbol={symbol} name={name} />
       <div>
         <h2 className="m-0 text-[30px] max-[640px]:text-[22px] leading-[1.2] font-bold text-[var(--text)]">
           {name} <span className="ml-2 font-normal text-[var(--muted)]">{symbol}{p?.exchange ? ` ${p.exchange}` : ''}</span>
@@ -262,7 +286,7 @@ export default function App() {
         ) : config.loading ? (
           <p className="text-[var(--text-2)] py-6">Loading…</p>
         ) : (
-          <Tab key={symbol} symbol={symbol} config={cfg} quote={quote} />
+          <Tab key={symbol} symbol={symbol} config={cfg} quote={quote} onOpen={(s) => { load(s); setTab('overview'); }} />
         )}
       </main>
     </>

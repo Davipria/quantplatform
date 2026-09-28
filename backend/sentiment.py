@@ -37,8 +37,14 @@ def score_text(text: str) -> dict:
 
 
 def tag(articles: list[dict]) -> list[dict]:
-    """Adds a `sentiment` field (see score_text) to each article, scored on its headline + summary."""
+    """Adds a `sentiment` field to each article: Massive's AI label and reason when the article has one (`ai`), else the local word
+    score (see score_text) of its headline + summary."""
     for a in articles:
+        ai = a.pop("ai", None)
+        if ai and ai["label"] in ("positive", "neutral", "negative"):
+            a["sentiment"] = {"label": ai["label"], "score": {"positive": 1.0, "negative": -1.0}.get(ai["label"], 0.0),
+                              "positive": int(ai["label"] == "positive"), "negative": int(ai["label"] == "negative"), "source": "ai", "reason": ai["reason"]}
+            continue
         text = a["headline"] + (". " + a["summary"] if a.get("summary") else "")
         a["sentiment"] = score_text(text)
     return articles

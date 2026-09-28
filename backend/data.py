@@ -535,11 +535,17 @@ def _yfinance_news(symbol: str, days: int) -> list[dict]:
 
 @ttl_cache(maxsize=64, ttl=1800)
 def company_news(symbol: str, days: int = 30) -> list[dict]:
-    """Recent headlines: Finnhub's /company-news plus Benzinga's own reporting for symbols Finnhub covers (US listings); for
+    """Recent headlines: Massive (with AI sentiment), Finnhub's /company-news plus Benzinga's own reporting for symbols Finnhub covers (US listings); for
     symbols outside Finnhub's free tier (no US listing), falls back to yfinance's own news feed instead. Newest first,
     deduplicated by headline."""
+    import massive  # here, not at the top: massive imports DataError from this module
+
     try:
         articles = _finnhub_news(symbol, days) + _benzinga_news(symbol, days)
+        try:  # first in the list, so its AI-scored copy wins the headline de-duplication below
+            articles = massive.news(symbol, days) + articles
+        except DataError:
+            pass  # optional source: no key, no quota right now, or a non-US symbol
     except DataError as e:
         if e.status != 422:
             raise

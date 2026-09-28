@@ -7,7 +7,7 @@ import {
   Seg, median,
 } from './ui.jsx';
 
-const UNIVERSES = [['peers', 'Direct competitors'], ['market', 'Largest companies'], ['custom', 'My own list']];
+const UNIVERSES = [['peers', 'Direct competitors'], ['market', 'Largest companies'], ['traded', 'Most traded (US)'], ['custom', 'My own list']];
 const SIZES = ['6', '10', '15', '20', '30'];
 function MetricsTable({ symbol }) {
   const [kind, setKind] = useState('peers');

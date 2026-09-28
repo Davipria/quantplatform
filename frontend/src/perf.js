@@ -141,3 +141,22 @@ export function intradayTicks(times) {
   const every = Math.ceil(vals.length / 9);
   return { vals: vals.filter((_, k) => k % every === 0), text: text.filter((_, k) => k % every === 0) };
 }
+
+/** Prices in today's dollars: each close x (latest CPI / CPI of its month). Months after the last CPI release use the latest CPI
+ * (no adjustment yet); days before the first CPI month are dropped. `cpi` = { dates: ['YYYY-MM-01'...], cpi: [...] }. */
+export function deflate(hist, cpi) {
+  if (!hist?.dates.length || !cpi?.dates.length) return hist;
+  const byMonth = new Map(cpi.dates.map((d, i) => [d.slice(0, 7), cpi.cpi[i]]));
+  const latest = cpi.cpi.at(-1);
+  const lastMonth = cpi.dates.at(-1).slice(0, 7);
+  const dates = [];
+  const close = [];
+  hist.dates.forEach((d, i) => {
+    const m = d.slice(0, 7);
+    const level = m > lastMonth ? latest : byMonth.get(m);
+    if (!level) return;
+    dates.push(d);
+    close.push(hist.close[i] * (latest / level));
+  });
+  return { ...hist, dates, close };
+}

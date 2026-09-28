@@ -64,7 +64,7 @@ export default function NewsTab({ symbol }) {
           <input type="checkbox" checked={hideYahoo} onChange={(e) => { setHideYahoo(e.target.checked); setPage(0); }} /> Hide Yahoo re-posts
         </label>
         {!!filtered.length && (
-          <div className="flex items-center gap-3 text-[13px] text-[var(--text-2)]" title="Local sentiment score, Loughran-McDonald finance word list">
+          <div className="flex items-center gap-3 text-[13px] text-[var(--text-2)]" title="AI sentiment from Massive where the article has one (hover a label for the reason), otherwise a local score from the Loughran-McDonald finance word list">
             {['positive', 'neutral', 'negative'].map((label) => (
               <span key={label} className="inline-flex items-center gap-1.5">
                 <span className={`inline-block w-2.5 h-2.5 rounded-full ${SENTIMENT_STYLE[label].dot}`} />
@@ -120,8 +120,11 @@ export default function NewsTab({ symbol }) {
                 {a.image && (
                   <img src={a.image} alt="" className="w-full h-32 object-cover rounded-lg mb-3 bg-[var(--bg)]" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 )}
-                <span className={`self-start mb-2 inline-block py-0.5 px-2 rounded-full text-xs font-medium capitalize ${SENTIMENT_STYLE[a.sentiment.label].pill}`}>
-                  {a.sentiment.label}
+                <span
+                  title={a.sentiment.reason ?? 'Local word-list score'}
+                  className={`self-start mb-2 inline-block py-0.5 px-2 rounded-full text-xs font-medium capitalize ${SENTIMENT_STYLE[a.sentiment.label].pill}`}
+                >
+                  {a.sentiment.label}{a.sentiment.source === 'ai' ? ' · AI' : ''}
                 </span>
                 <h3 className="m-0 text-lg font-bold text-[var(--navy)] leading-snug line-clamp-3">{a.headline}</h3>
                 {a.summary && <p className="mt-2 mb-0 text-[13px] text-[var(--text-2)] leading-snug line-clamp-3">{a.summary}</p>}
