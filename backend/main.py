@@ -16,6 +16,7 @@ import calendars  # noqa: E402
 import congress  # noqa: E402
 import fairvalue  # noqa: E402
 import filings  # noqa: E402
+import forecast  # noqa: E402
 import forward  # noqa: E402
 import futures  # noqa: E402
 import insiders  # noqa: E402
@@ -97,6 +98,16 @@ def overview_overlay(symbol: str, kind: str):
     if kind not in overview.OVERLAYS:
         raise data.DataError(400, f"Unknown overlay {kind}")
     return overview.overlay(symbol_of(symbol), kind)
+
+
+@app.get("/api/forecast/{symbol}")
+def forecast_view(symbol: str, horizon: int = 30):
+    return forecast.price_forecast(symbol_of(symbol), horizon)
+
+
+@app.get("/api/forecast/{symbol}/with-market")
+def forecast_market_view(symbol: str, horizon: int = 30):
+    return forecast.market_forecast(symbol_of(symbol), horizon)
 
 
 @app.get("/api/yfinance/ev-ebitda/{symbol}")
@@ -276,6 +287,13 @@ def macro_view():
 @app.get("/api/macro/cpi")
 def macro_cpi():
     return macro.cpi()
+
+
+@app.get("/api/macro/forecast/{series}")
+def macro_forecast_view(series: str):
+    if series not in macro.FORECAST_SERIES:
+        raise data.DataError(400, f"Unknown series {series}")
+    return macro.forecast(series)
 
 
 @app.get("/api/rate-sensitivity/{symbol}")

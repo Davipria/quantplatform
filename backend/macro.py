@@ -22,6 +22,7 @@ from cachetools.func import ttl_cache
 import data
 import massive
 from data import DataError, upstream
+from forecast import extrapolate
 
 MATURITIES = [("yield_1_month", "1M"), ("yield_3_month", "3M"), ("yield_1_year", "1Y"), ("yield_2_year", "2Y"),
               ("yield_5_year", "5Y"), ("yield_10_year", "10Y"), ("yield_30_year", "30Y")]
@@ -138,6 +139,42 @@ def macro() -> dict:
     tiles["policy"] = {"upper": upper, "lower": lower, "date": upper_date}
     return {"asOf": dt.date.today().isoformat(), "tiles": tiles, "yields": yields, "inflation": inflation,
             "expectations": expectations, "labor": labor, "policy": policy}
+
+
+FORECAST_SERIES = {  # key -> (label, step, horizon, context cap)
+    "y10": ("10-year Treasury yield", "week", 26, 520),
+    "cpi": ("CPI, year on year", "month", 12, 240),
+    "unemployment": ("Unemployment rate", "month", 12, 240),
+}
+
+
+def _series_values(series: str) -> tuple[list[str], list[float]]:
+    m = macro()
+    if series == "y10":
+        return m["yields"]["dates"], m["yields"]["y10"]
+    if series == "cpi":
+        return m["inflation"]["dates"], m["inflation"]["cpi"]
+    return m["labor"]["dates"], m["labor"]["unemployment"]
+
+
+@ttl_cache(maxsize=8, ttl=6 * 3600)
+def forecast(series: str) -> dict:
+    """Zero-shot forecast (TimesFM, see `forecast.py`) of one macro series, at its own natural step (weekly for yields,
+    monthly for inflation/labor). A statistical extrapolation of the recent pattern, not an economic model or a Fed
+    projection -- treat it the same way as the Overview price forecast."""
+    if series not in FORECAST_SERIES:
+        raise DataError(400, f"Unknown series {series}")
+    label, step, horizon, cap = FORECAST_SERIES[series]
+    dates, values = _series_values(series)
+    pairs = [(d, v) for d, v in zip(dates, values) if v is not None][-cap:]
+    if len(pairs) < 30:
+        raise DataError(422, f"Not enough history for {series} to forecast")
+    clean_dates, clean_values = zip(*pairs)
+    out = extrapolate(list(clean_values), horizon)
+    last = pd.Timestamp(clean_dates[-1])
+    step_offset = pd.DateOffset(weeks=1) if step == "week" else pd.DateOffset(months=1)
+    future = [(last + step_offset * i).strftime("%Y-%m-%d") for i in range(1, horizon + 1)]
+    return {"series": series, "label": label, "lastDate": clean_dates[-1], "lastValue": clean_values[-1], "dates": future, **out}
 
 
 @ttl_cache(maxsize=1, ttl=6 * 3600)

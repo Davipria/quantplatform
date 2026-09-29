@@ -34,6 +34,30 @@ function inversionShapes(dates, spread) {
   return shapes;
 }
 
+const alpha = (hex, a) => {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+};
+
+/** Dashed continuation of a series + a shaded 10-90% band, picking up from `lastDate`/`lastValue` for a seamless join. */
+function forecastTraces(lastDate, lastValue, fc, color, name) {
+  if (!fc) return [];
+  const x = [lastDate, ...fc.dates];
+  return [
+    { type: 'scatter', mode: 'lines', x, y: [lastValue, ...fc.low], line: { width: 0 }, hoverinfo: 'skip', showlegend: false },
+    {
+      type: 'scatter', mode: 'lines', name: `${name} (10-90% range)`, x, y: [lastValue, ...fc.high], fill: 'tonexty',
+      fillcolor: alpha(color, 0.16), line: { width: 0 }, hovertemplate: `%{y:.2f}%<extra>${name} forecast range</extra>`,
+    },
+    {
+      type: 'scatter', mode: 'lines', name: `${name} (forecast)`, x, y: [lastValue, ...fc.forecast],
+      line: { color, width: 1.6, dash: 'dash' }, hovertemplate: `%{y:.2f}%<extra>${name} forecast</extra>`,
+    },
+  ];
+}
+
 const zeroLine = (y = 0, dash = 'dot') => ({ type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y', y0: y, y1: y, line: { color: '#888', width: 1, dash } });
 const line = (x, y, name, color, { line: style, ...rest } = {}) => ({
   x, y, name, type: 'scatter', mode: 'lines', connectgaps: true, line: { color, width: 1.6, ...style },
@@ -61,7 +85,7 @@ function Panel({ title, note, children }) {
   );
 }
 
-function Charts({ d, range }) {
+function Charts({ d, range, forecast }) {
   const cutoff = cutoffFor(range);
   const y = useMemo(() => {
     const [dates, m3, y2, y10, y30, s2s10, s3m10] = cut(cutoff, d.yields.dates, d.yields.m3, d.yields.y2, d.yields.y10, d.yields.y30, d.yields.s2s10, d.yields.s3m10);
@@ -86,9 +110,12 @@ function Charts({ d, range }) {
     };
   }, [d]);
   const yields = useCallback((t) => ({
-    data: [line(y.dates, y.m3, '3 months', t.palette[2]), line(y.dates, y.y2, '2 years', t.palette[1]), line(y.dates, y.y10, '10 years', t.brand), line(y.dates, y.y30, '30 years', t.muted)],
+    data: [
+      line(y.dates, y.m3, '3 months', t.palette[2]), line(y.dates, y.y2, '2 years', t.palette[1]), line(y.dates, y.y10, '10 years', t.brand), line(y.dates, y.y30, '30 years', t.muted),
+      ...forecastTraces(d.yields.dates.at(-1), d.yields.y10.at(-1), forecast?.y10, t.brand, '10-year yield'),
+    ],
     layout: { ...LEGEND, margin: MARGIN, yaxis: yAxis, shapes: inversionShapes(y.dates, y.s2s10) },
-  }), [y]);
+  }), [y, d, forecast]);
   const spreads = useCallback((t) => ({
     data: [line(y.dates, y.s2s10, '10Y − 2Y', t.brand), line(y.dates, y.s3m10, '10Y − 3M', t.palette[1])],
     layout: { ...LEGEND, margin: MARGIN, yaxis: { ticksuffix: ' pts', zeroline: false }, shapes: [zeroLine(), ...inversionShapes(y.dates, y.s2s10)] },
@@ -98,9 +125,12 @@ function Charts({ d, range }) {
     layout: { ...LEGEND, margin: MARGIN, yaxis: yAxis },
   }), [pol]);
   const inflation = useCallback((t) => ({
-    data: [line(infl.dates, infl.cpi, 'CPI, year on year', t.brand), line(infl.dates, infl.core, 'Core CPI, year on year', t.palette[1]), line(infl.dates, infl.cpi3m, 'CPI, last 3 months annualised', t.muted, { line: { dash: 'dot', width: 1.2 } })],
+    data: [
+      line(infl.dates, infl.cpi, 'CPI, year on year', t.brand), line(infl.dates, infl.core, 'Core CPI, year on year', t.palette[1]), line(infl.dates, infl.cpi3m, 'CPI, last 3 months annualised', t.muted, { line: { dash: 'dot', width: 1.2 } }),
+      ...forecastTraces(d.inflation.dates.at(-1), d.inflation.cpi.at(-1), forecast?.cpi, t.brand, 'CPI'),
+    ],
     layout: { ...LEGEND, margin: MARGIN, yaxis: { ...yAxis, zeroline: false }, shapes: [zeroLine()] },
-  }), [infl]);
+  }), [infl, d, forecast]);
   const expectations = useCallback((t) => ({
     data: [line(exp.dates, exp.y1, '1 year', t.palette[2]), line(exp.dates, exp.y5, '5 years', t.palette[1]), line(exp.dates, exp.y10, '10 years', t.brand), line(exp.dates, exp.y30, '30 years', t.muted)],
     layout: { ...LEGEND, margin: MARGIN, yaxis: yAxis },
@@ -113,13 +143,14 @@ function Charts({ d, range }) {
     data: [
       { ...line(lab.dates, lab.un, 'Unemployment rate', t.brand) },
       { x: lab.dates, y: lab.sahm, name: 'Sahm indicator', type: 'bar', yaxis: 'y2', marker: { color: lab.sahm.map((v) => (v != null && v >= 0.5 ? t.down : t.muted)), opacity: 0.55 }, hovertemplate: '%{y:.2f} pts<extra>Sahm indicator</extra>' },
+      ...forecastTraces(d.labor.dates.at(-1), d.labor.unemployment.at(-1), forecast?.unemployment, t.brand, 'Unemployment'),
     ],
     layout: {
       ...LEGEND, margin: { ...MARGIN, r: 44 }, yaxis: yAxis,
       yaxis2: { overlaying: 'y', side: 'right', showgrid: false, zeroline: false, ticksuffix: ' pts', range: [0, Math.max(1.5, ...lab.sahm.map((v) => v ?? 0))] },
       shapes: [{ type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y2', y0: 0.5, y1: 0.5, line: { color: '#d55', width: 1, dash: 'dot' } }],
     },
-  }), [lab]);
+  }), [lab, d, forecast]);
   const wages = useCallback((t) => ({
     data: [line(lab.dates, lab.wages, 'Average hourly earnings, year on year', t.brand), line(lab.dates, wageLine, 'CPI, year on year', t.palette[1])],
     layout: { ...LEGEND, margin: MARGIN, yaxis: { ...yAxis, zeroline: false }, shapes: [zeroLine()] },
@@ -261,9 +292,69 @@ function RateSensitivity({ symbol }) {
   );
 }
 
+/** Two TimesFM forecasts of the same 30 trading days for the header stock: "solo" (its own history alone, like the Overview
+ * tab) versus "with market" (forecast TOGETHER with the S&P 500 as a second variate -- TimesFM's actual multivariate mode,
+ * where the index's recent pattern can also shape the stock's projection). The gap between the two shows how much accounting
+ * for the market changes the picture, not which is "right": both are pattern extrapolations, not predictions. */
+function MarketForecast({ symbol }) {
+  const { data: f, error, loading } = useApi(`/api/forecast/${encodeURIComponent(symbol)}/with-market`);
+
+  const chart = useCallback((t) => {
+    const x = [f.lastDate, ...f.dates];
+    const band = (series, color) => [
+      { type: 'scatter', mode: 'lines', x, y: [f.lastClose, ...series.low], line: { width: 0 }, hoverinfo: 'skip', showlegend: false },
+      { type: 'scatter', mode: 'lines', x, y: [f.lastClose, ...series.high], fill: 'tonexty', fillcolor: alpha(color, 0.14), line: { width: 0 }, hoverinfo: 'skip', showlegend: false },
+    ];
+    return {
+      data: [
+        ...band(f.solo, t.brand),
+        { type: 'scatter', mode: 'lines', name: 'Solo forecast', x, y: [f.lastClose, ...f.solo.forecast], line: { color: t.brand, width: 2, dash: 'dash' }, hovertemplate: `%{y:,.2f}<extra>Solo</extra>` },
+        ...band(f.withMarket, t.palette[1]),
+        { type: 'scatter', mode: 'lines', name: 'With market', x, y: [f.lastClose, ...f.withMarket.forecast], line: { color: t.palette[1], width: 2, dash: 'dash' }, hovertemplate: `%{y:,.2f}<extra>With market</extra>` },
+      ],
+      layout: { ...LEGEND, margin: { l: 56, r: 16, t: 8, b: 36 }, xaxis: { type: 'date' }, yaxis: { tickformat: f.lastClose >= 1000 ? ',.0f' : ',.2f' } },
+    };
+  }, [f]);
+
+  return (
+    <section className="mt-10 pt-2 border-t border-[var(--border)]">
+      <h2 className="mt-4">Forecast with market context: {symbol}</h2>
+      <p className="text-[var(--text-2)] text-[13px] mb-3">
+        Two zero-shot TimesFM forecasts of the same 30 trading days: "Solo" uses only {symbol}'s own price history, like the Overview tab's forecast.
+        "With market" forecasts {symbol} and the S&amp;P 500 TOGETHER as related series (both rebased to a common starting point first, since their price
+        scales and currencies otherwise differ), so the index's recent pattern can also shape the stock's projection.
+      </p>
+      {loading && <p className="text-[var(--text-2)] py-4">Loading…</p>}
+      {error && <p className="text-[var(--err)] py-4">{error.message}</p>}
+      {f && (
+        <>
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3 mb-3">
+            <Tile label="Price now" value={f.lastClose.toFixed(2)} sub={f.lastDate} />
+            <Tile label="Solo forecast (30d)" value={f.solo.forecast.at(-1).toFixed(2)} sub={signedPct((f.solo.forecast.at(-1) / f.lastClose - 1) * 100)} />
+            <Tile label="With market (30d)" value={f.withMarket.forecast.at(-1).toFixed(2)} sub={signedPct((f.withMarket.forecast.at(-1) / f.lastClose - 1) * 100)} />
+            <Tile label="Gap at day 30" value={signedPct((f.withMarket.forecast.at(-1) / f.solo.forecast.at(-1) - 1) * 100)} sub="with market vs. solo" />
+          </div>
+          <Plot build={chart} className="h-[320px]" />
+          <p className="text-[var(--text-2)] text-xs mt-1">
+            Shaded areas are each forecast's 10th-90th percentile range. Neither line knows about the company's fundamentals, news or upcoming events --
+            statistical extrapolations of recent patterns, not price targets.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function MacroTab({ symbol }) {
   const [range, setRange] = useState('10Y');
+  const [showForecast, setShowForecast] = useState(false);
   const { data: d, error, loading } = useApi('/api/macro');
+  const fy10 = useApi(showForecast ? '/api/macro/forecast/y10' : null);
+  const fcpi = useApi(showForecast ? '/api/macro/forecast/cpi' : null);
+  const funemp = useApi(showForecast ? '/api/macro/forecast/unemployment' : null);
+  const forecast = { y10: fy10.data, cpi: fcpi.data, unemployment: funemp.data };
+  const forecastPending = showForecast && (fy10.loading || fcpi.loading || funemp.loading);
+  const forecastError = showForecast && (fy10.error || fcpi.error || funemp.error);
   if (loading) return <p className="text-[var(--text-2)] py-6">Loading macro data (the first load takes a few seconds)…</p>;
   if (error) return <p className="text-[var(--err)] py-6">Could not load macro data: {error.message}</p>;
 
@@ -301,10 +392,23 @@ export default function MacroTab({ symbol }) {
             {r}
           </button>
         ))}
+        <label className="inline-flex items-center gap-1.5 ml-2 text-[13px] text-[var(--text-2)]" title="A zero-shot forecast (Google TimesFM) on the 10-year yield, CPI and unemployment charts, not a Fed projection or a signal">
+          <input type="checkbox" checked={showForecast} onChange={(e) => setShowForecast(e.target.checked)} /> Forecast
+        </label>
       </div>
+      {forecastPending && <p className="text-[var(--text-2)] text-[13px] mt-1">Loading the forecast (the first one after a backend restart also downloads the model, up to a minute)…</p>}
+      {forecastError && <p className="text-[var(--err)] text-[13px] mt-1">Could not load the forecast: {(fy10.error || fcpi.error || funemp.error).message}</p>}
+      {showForecast && !forecastPending && !forecastError && (
+        <p className="text-[var(--text-2)] text-[13px] mt-1">
+          Dashed lines with a shaded range on the yield, inflation and unemployment charts: a zero-shot statistical extrapolation of the recent pattern by Google's
+          TimesFM 3.0 model (10-year yield 26 weeks ahead, CPI and unemployment 12 months ahead), with a 10th-90th percentile range. Not a Fed projection or an
+          economic model -- it has no knowledge of policy decisions, data releases, or anything beyond the shape of the recent series.
+        </p>
+      )}
 
-      <Charts d={d} range={range} />
+      <Charts d={d} range={range} forecast={showForecast ? forecast : null} />
       {symbol && <RateSensitivity symbol={symbol} />}
+      {symbol && <MarketForecast symbol={symbol} />}
     </>
   );
 }

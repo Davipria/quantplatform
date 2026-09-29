@@ -22,3 +22,5 @@ Thumbs.db
 
 # Local data cache
 backend/cache/
+
+.claude 

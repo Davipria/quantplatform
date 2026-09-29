@@ -65,17 +65,19 @@ function zoneName(timeZone) {
 }
 
 /** Daily closes (`dates`), or intraday bars (`times` in the exchange's `timezone`: one category per bar, so nights and weekends leave
- * no gaps and the tooltip title is the bar's time; `base` = the previous close, drawn as a dashed line on the "Today" range). */
-function PriceChart({ dates, close, overlay, log, times, timezone, base }) {
+ * no gaps and the tooltip title is the bar's time; `base` = the previous close, drawn as a dashed line on the "Today" range).
+ * `forecast` (daily view only) = {dates, forecast, low, high} from TimesFM, drawn as a dashed continuation with a shaded band. */
+function PriceChart({ dates, close, overlay, log, times, timezone, base, forecast }) {
   const build = useCallback((t) => {
     const zone = times ? zoneName(timezone) : '';
     const x = times ? times.map((s) => `${s} ${zone}`) : dates;
     const last = close.at(-1);
-    const lo = Math.min(...close, base ?? Infinity), hi = Math.max(...close, base ?? -Infinity);
+    const fLo = forecast ? Math.min(...forecast.low) : Infinity, fHi = forecast ? Math.max(...forecast.high) : -Infinity;
+    const lo = Math.min(...close, base ?? Infinity, fLo), hi = Math.max(...close, base ?? -Infinity, fHi);
     const pad = (hi - lo) * 0.05 || hi * 0.05;
     const floor = log ? lo * 0.92 : lo - pad;
     const yRange = log ? [Math.log10(floor), Math.log10(hi * 1.08)] : [floor, hi + pad];
-    const ends = [x[0], x.at(-1)];
+    const ends = [x[0], forecast ? forecast.dates.at(-1) : x.at(-1)];
     const data = [
       { type: 'scatter', mode: 'lines', x: ends, y: [floor, floor], line: { width: 0 }, hoverinfo: 'skip' }, // fill anchor
       {
@@ -110,6 +112,21 @@ function PriceChart({ dates, close, overlay, log, times, timezone, base }) {
         text: `Previous close ${base.toFixed(2)}`, font: { color: t.text, size: 11 },
       });
     }
+    if (forecast) {
+      const fc = t.palette[3];
+      const fx = [dates.at(-1), ...forecast.dates];
+      data.push(
+        { type: 'scatter', mode: 'lines', x: fx, y: [last, ...forecast.low], line: { width: 0 }, hoverinfo: 'skip', showlegend: false },
+        {
+          type: 'scatter', mode: 'lines', name: '10-90% range', x: fx, y: [last, ...forecast.high], fill: 'tonexty',
+          fillcolor: alpha(fc, 0.18), line: { width: 0 }, hovertemplate: '%{y:,.2f}<extra>10-90% range</extra>',
+        },
+        {
+          type: 'scatter', mode: 'lines', name: 'Forecast', x: fx, y: [last, ...forecast.forecast],
+          line: { color: fc, width: 2, dash: 'dash' }, hovertemplate: '%{y:,.2f}<extra>Forecast</extra>',
+        },
+      );
+    }
     if (overlay) {
       const { series, from, to, kind } = overlay;
       const money = kind !== 'pe' && kind !== 'div';
@@ -134,7 +151,7 @@ function PriceChart({ dates, close, overlay, log, times, timezone, base }) {
       };
     }
     return { data, layout };
-  }, [dates, close, overlay, log, times, timezone, base]);
+  }, [dates, close, overlay, log, times, timezone, base, forecast]);
   return <Plot build={build} className="h-[460px]" />;
 }
 
@@ -223,6 +240,7 @@ export default function OverviewTab({ symbol, quote }) {
   const [overlay, setOverlay] = useState(null);
   const [log, setLog] = useState(false);
   const [real, setReal] = useState(false);
+  const [showForecast, setShowForecast] = useState(false);
   const [ddInfo, setDdInfo] = useState(false);
   const [years, setYears] = useState('20');
   const [divMode, setDivMode] = useState('payment');
@@ -245,6 +263,8 @@ export default function OverviewTab({ symbol, quote }) {
   // "Today" and "1 Week" draw intraday bars (refreshed every minute while fresh, every 10 minutes once the session is over); the tile
   // returns and the drawdown still come from the daily closes
   const intra = active === '1d' || active === '1w';
+  const forecastOn = showForecast && !intra && !isReal;
+  const fc = useApi(forecastOn ? `/api/forecast/${enc}?horizon=30` : null);
   const intraBars = usePoll(
     intra ? `/api/overview/${enc}/intraday?range=${active}` : null,
     (b) => (b && Date.now() / 1000 - b.last < 1800 ? 60 : 600),
@@ -306,9 +326,15 @@ export default function OverviewTab({ symbol, quote }) {
             >
               <input type="checkbox" checked={real && canReal} disabled={!canReal} onChange={(e) => setReal(e.target.checked)} /> Inflation-adjusted
             </label>
+            <label
+              className="inline-flex items-center gap-1.5 ml-1.5 text-[var(--tabbar-text)] has-[:disabled]:opacity-45"
+              title={intra ? 'Forecasts are for the daily ranges (1 Month and longer)' : isReal ? 'Not with inflation-adjusted prices' : 'A zero-shot forecast (Google TimesFM), not a signal'}
+            >
+              <input type="checkbox" checked={forecastOn} disabled={intra || isReal} onChange={(e) => setShowForecast(e.target.checked)} /> Forecast
+            </label>
           </div>
         </div>
-        {!intra && <PriceChart dates={view.dates} close={view.close} overlay={overlayProp} log={log} />}
+        {!intra && <PriceChart dates={view.dates} close={view.close} overlay={overlayProp} log={log} forecast={forecastOn ? fc.data : null} />}
         {intra && liveBars && (
           <PriceChart times={liveBars.times} timezone={liveBars.timezone} close={liveBars.close} log={log} base={active === '1d' ? d.close[w.i0] : null} />
         )}
@@ -326,6 +352,14 @@ export default function OverviewTab({ symbol, quote }) {
         {!intra && overlay && overlay !== 'div' && ov.loading && <p className="text-[var(--text-2)] text-[13px]">Loading {OVERLAYS.find((o) => o[0] === overlay)[1]}…</p>}
         {!intra && overlay && overlay !== 'div' && ov.error && <p className="text-[var(--err)] text-[13px]">{ov.error.message}</p>}
         {!intra && overlay && !ov.error && <p className="text-[var(--text-2)] text-[13px]">{OVERLAY_NOTES[overlay]}</p>}
+        {forecastOn && fc.loading && <p className="text-[var(--text-2)] text-[13px]">Loading the forecast (the first one after a backend restart also downloads the model, up to a minute)…</p>}
+        {forecastOn && fc.error && <p className="text-[var(--err)] text-[13px]">Could not load the forecast: {fc.error.message}</p>}
+        {forecastOn && fc.data && (
+          <p className="text-[var(--text-2)] text-[13px]">
+            Forecast: a zero-shot statistical extrapolation of the recent price pattern by Google's TimesFM 3.0 model, 30 trading days ahead, with a shaded 10th-90th percentile
+            range. It has no knowledge of the company, its fundamentals, news, or upcoming events -- not a price target or a signal.
+          </p>
+        )}
         {real && canReal && cpi.loading && <p className="text-[var(--text-2)] text-[13px]">Loading the consumer price index…</p>}
         {real && canReal && cpi.error && <p className="text-[var(--err)] text-[13px]">Could not load the consumer price index: {cpi.error.message}</p>}
         {isReal && (
